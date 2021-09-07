@@ -19,6 +19,11 @@
   },
   "homepage": "https://github.com/chilsa/3d-level#readme",
   "dependencies": {
+    "@turf/helpers": "^6.5.0",
+    "@turf/invariant": "^6.5.0",
+    "@turf/line-offset": "^6.5.0",
+    "@turf/line-to-polygon": "^6.5.0",
+    "@turf/nearest-point-on-line": "^6.5.0",
     "lodash": "^4.17.21",
     "mapbox-gl": "^1.13.0",
     "react": "^17.0.2",
