@@ -1,10 +1,22 @@
-import React, {useEffect, useState, Fragment} from 'react';
+import React, {useEffect} from 'react';
 import mapboxgl from 'mapbox-gl';
 import turfLineToPolygon from '@turf/line-to-polygon';
 import turfLineOffset from '@turf/line-offset';
-import {lineString as turfLineString} from '@turf/helpers';
+import {lineString as turfLineString, point as turfPoint} from '@turf/helpers';
 import {getCoords as turfGetCoords} from '@turf/invariant';
-import {reverse as _reverse, includes as _includes} from 'lodash';
+import turfNearestPointOnLine from '@turf/nearest-point-on-line';
+import turfLineSplit from '@turf/line-split';
+import {featureEach as turfFeatureEach} from '@turf/meta';
+import {
+	reverse as _reverse,
+	map as _map,
+	filter as _filter,
+	flatten as _flatten,
+	forEach as _forEach,
+	isEqual as _isEqual,
+	isEqualWith as _isEqualWith,
+	some as _some
+} from 'lodash';
 import geojson from '../featuresOfKowloonEastGovernmentOffices_GF';
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiY2hpbHNhIiwiYSI6ImNrczhjcjJqYjB4Y3YybmxoZXF4MGxpN2IifQ.MCk1P9kZx-xxYmF1Ne6IlQ';
@@ -22,73 +34,152 @@ polygonFeatures = polygonFeatures.map(f => {
 	return obj;
 });
 */
-const gate1 = {
+
+const features = geojson.features;
+// polygon to lines
+const unit = {
 	"type": "Feature",
 	"properties": {
-		"gate": "yes",
-		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_gate_179",
-		"imdf_id": "c6b69d3d-4810-4670-89d3-3b102a2dc680",
+		"ref:poi": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_poi:unit_127",
+		"area": "yes",
+		"BaseLevel": "7.2",
+		"Creation_by": "03",
+		"CreationDate": "10/11/2020",
+		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_153",
+		"imdf_id": "59175163-c1bc-44f8-acb4-37399d8a3bfc",
+		"LastAmendment_by": "03",
+		"LastAmendmentDate": "13/07/2021 11:46:36",
 		"ref:building": "922674f34fc04a9088afcd3925d8e9ae",
 		"ref:level": "791abf1f98774034be2ff9701738921e",
-		"ref:unit": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_135,922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_connector_21"
+		"Restricted": "N",
+		"True3DSDModelID": "1B41725189540106011",
+		"TrueBuildingCSUID": "4172518954T20050430",
+		"unit": "steps",
+		"Unit_Number": "0105",
+		"UnitSubtype": "12-01"
 	},
 	"geometry": {
 		"coordinates": [
 			[
-				114.2298052,
-				22.3094233
+				114.2298159,
+				22.3097483
 			],
 			[
-				114.2298098,
-				22.3094295
+				114.2298069,
+				22.3097363
 			],
 			[
-				114.2298148,
-				22.3094362
+				114.2298276,
+				22.3097233
+			],
+			[
+				114.2298364,
+				22.3097349
+			],
+			[
+				114.2298159,
+				22.3097483
 			]
 		],
-		"type": "LineString"
+		"type": "Polygon"
 	}
 };
-const gate2 = {
-	"type": "Feature",
-	"properties": {
-		"gate": "yes",
-		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_gate_177",
-		"imdf_id": "493d4b83-8131-462e-9cd1-88c9c7237521",
-		"ref:building": "922674f34fc04a9088afcd3925d8e9ae",
-		"ref:level": "791abf1f98774034be2ff9701738921e",
-		"ref:unit": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_132,922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_connector_20"
-	},
-	"geometry": {
-		"coordinates": [
-			[
-				114.229849,
-				22.3094334
-			],
-			[
-				114.2298557,
-				22.3094291
-			],
-			[
-				114.2298652,
-				22.309423
-			]
-		],
-		"type": "LineString"
+const unitGates = geojson.features.filter(f => {
+	return f.properties.gate === 'yes'
+		&& f.properties['ref:unit']?.split(',')?.includes(unit.properties.id)
+});
+
+let units = [];
+let gates = [];
+_forEach(features, f => {
+	if (f.properties?.unit) {
+		units.push(f);
 	}
-};
-const brokenLine = turfLineString([[114.2298921, 22.3094855], [114.229914, 22.3094716], [114.2299002, 22.3094534]]);
+	if (f.properties.gate === 'yes') {
+		gates.push(f);
+	}
+});
 
-const features = geojson.features,
-	refUnits = gate2.properties['ref:unit'].split(','),
-	gate2RefUnits = features.filter(f => f.properties.unit && _includes(refUnits, f.properties.id));
-console.log(gate2RefUnits);
+let obj;
+const data = _map(units, u => {
+	obj = {...u};
+	obj.properties.Height = '4.57';
+	return {
+		unit: obj,
+		gates: _filter(gates, g => g.properties['ref:unit'].split(',').includes(u.properties.id))
+	}
+});
 
+let unitHasGates = [];
+let unitHasNoGates = [];
+_forEach(data, d => {
+	if (d.gates.length) {
+		unitHasGates.push(d);
+	} else {
+		unitHasNoGates.push(d.unit);
+	}
+});
 
-const p1 = lineToPolygon(gate1);
-const p2 = lineToPolygon(gate2);
-const p3 = lineToPolygon(brokenLine);
+const splitsArr = _map(unitHasGates, d => splitUnitByGates(d.unit, d.gates));
+const splits = _flatten(splitsArr);
+const _lines = _map(splits, sp => lineToPolygon(sp));
+console.log(splits);
+
+// return split points(feature) on the unit
+function getSplitters(unit, gates) {
+	let coords = [];
+	// get gates start-end points array
+	const gateStartEndPoints = _map(gates, g => {
+		coords = turfGetCoords(g);
+		return _filter(coords, (c, index) => !index || index === coords.length - 1);
+	});
+	// switch unit to line
+	const unitToLine = turfLineString(turfGetCoords(unit));
+	// get the nearest points array of the gates start-end points on the line
+	let pt;
+	return _map(gateStartEndPoints, locs => {
+		return _map(locs, loc => {
+			pt = turfPoint(loc);
+			return turfNearestPointOnLine(unitToLine, pt);
+		})
+	});
+}
+
+function splitUnitByGates(unit, gates) {
+	const splitters = getSplitters(unit, gates);
+	const unitToLine = turfLineString(turfGetCoords(unit));
+	let lines = [];
+	let split;
+	let copies;
+	_forEach(_flatten(splitters), p => {
+		if (lines.length) {
+			copies = [...lines];
+			lines = [];
+			_forEach(copies, f => {
+				split = turfLineSplit(f, p);
+				turfFeatureEach(split, f => lines = [...lines, f]);
+			});
+		} else {
+			split = turfLineSplit(unitToLine, p);
+			turfFeatureEach(split, f => lines.push(f));
+		}
+	});
+	
+	let coords;
+	const splitterCoords = _map(splitters, features => _map(features, f => turfGetCoords(f)));
+	let linesTakeoffGates = _filter(lines, f => {
+		coords = turfGetCoords(f);
+		return !_some(splitterCoords, elm => {
+			return _isEqualWith(elm, coords, (elmV, coordsV) => {
+				return _isEqual(elmV, coordsV) || _isEqual(elmV, _reverse(coordsV));
+			})
+		});
+	});
+	// add unit properties to split lines
+	linesTakeoffGates = _map(linesTakeoffGates, f => ({...f, properties: unit.properties}));
+	
+	return linesTakeoffGates;
+}
 
 function lineToPolygon(lineFeature) {
 	const leftOffset = turfLineOffset(lineFeature, -0.15, {units: 'meters'}),
@@ -96,10 +187,90 @@ function lineToPolygon(lineFeature) {
 		combineLine = turfLineString(
 			turfGetCoords(leftOffset).concat(_reverse(turfGetCoords(rightOffset)))
 		);
-	return turfLineToPolygon(combineLine);
+	try {
+		return turfLineToPolygon(combineLine);
+	} catch (e) {
+		console.log(lineFeature, combineLine);
+	}
+	
 }
 
+let lines = splitUnitByGates(unit, unitGates);
+lines = _map(lines, l => lineToPolygon(l));
 
+const unusual = {
+	"type": "Feature",
+	"properties": {
+		"ref:poi": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_poi:unit_99",
+		"area": "yes",
+		"BaseLevel": "7.2",
+		"Creation_by": "03",
+		"CreationDate": "10/11/2020",
+		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_121",
+		"imdf_id": "2abcb199-3b15-4ccc-9d84-c9317a185cb6",
+		"LastAmendment_by": "03",
+		"LastAmendmentDate": "13/07/2021 11:46:36",
+		"ref:building": "922674f34fc04a9088afcd3925d8e9ae",
+		"ref:level": "791abf1f98774034be2ff9701738921e",
+		"Restricted": "N",
+		"True3DSDModelID": "1B41725189540106011",
+		"TrueBuildingCSUID": "4172518954T20050430",
+		"unit": "room",
+		"Unit_Number": "0102",
+		"UnitSubtype": "09-01"
+	},
+	"geometry": {
+		"coordinates": [
+			[
+				114.2299791,
+				22.3096146
+			],
+			[
+				114.2299892,
+				22.3096081
+			],
+			[
+				114.2299913,
+				22.309611
+			],
+			[
+				114.2300186,
+				22.3095934
+			],
+			[
+				114.2300166,
+				22.3095907
+			],
+			[
+				114.2300284,
+				22.3095831
+			],
+			[
+				114.2300198,
+				22.3095708
+			],
+			[
+				114.2299846,
+				22.3095935
+			],
+			[
+				114.2299784,
+				22.3095853
+			],
+			[
+				114.2299641,
+				22.3095946
+			],
+			[
+				114.2299791,
+				22.3096146
+			]
+		],
+		"type": "Polygon"
+	}
+}
+
+// -------
 function getRandomColor() {
 	return `rgba(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},1)`;
 }
@@ -128,75 +299,21 @@ export default function LevelElements() {
 	useEffect(() => {
 		const map = initMapbox();
 		map.on('load', () => {
-			// lines
-			addSource(map, gate1.properties.id, gate1);
-			map.addLayer({
-				id: gate1.properties.id,
-				type: 'line',
-				source: gate1.properties.id,
-				paint: {
-					"line-color": "blue",
-					"line-width": 2
-				}
-			});
-			
-			addSource(map, gate2.properties.id, gate2);
-			map.addLayer({
-				id: gate2.properties.id,
-				type: 'line',
-				source: gate2.properties.id,
-				paint: {
-					"line-color": "green",
-					"line-width": 2
-				}
-			});
-			
-			addSource(map, 'broken-line', brokenLine);
-			map.addLayer({
-				id: 'broken-line',
-				type: 'line',
-				source: 'broken-line',
-				paint: {
-					"line-color": "purple",
-					"line-width": 2
-				}
-			});
-
-			// polygons
-			map.addLayer({
-				id: 'lineToPolygon1',
-				type: 'fill',
-				source: {
-					type: 'geojson',
-					data: p1
-				},
-				'paint': {
-					'fill-color': 'red',
-					'fill-opacity': 0.5
-				}
-			});
-			map.addLayer({
-				id: 'lineToPolygon2',
-				type: 'fill',
-				source: {
-					type: 'geojson',
-					data: p2
-				},
-				'paint': {
-					'fill-color': 'yellow',
-					'fill-opacity': 0.5
-				}
-			});
 			map.addLayer({
 				id: 'lineToPolygon3',
-				type: 'fill',
+				type: 'fill-extrusion',
 				source: {
 					type: 'geojson',
-					data: p3
+					data: {
+						type: 'FeatureCollection',
+						features: lines
+					}
 				},
 				'paint': {
-					'fill-color': 'orange',
-					'fill-opacity': 0.5
+					'fill-extrusion-color': '#aaa',
+					'fill-extrusion-height': 4,
+					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
+					'fill-extrusion-opacity': 0.5
 				}
 			});
 		});
