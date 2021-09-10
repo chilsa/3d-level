@@ -1,304 +1,234 @@
 import React, {useEffect} from 'react';
 import mapboxgl from 'mapbox-gl';
-import turfLineToPolygon from '@turf/line-to-polygon';
-import turfLineOffset from '@turf/line-offset';
+import data from '../fixedData';
 import {lineString as turfLineString, point as turfPoint} from '@turf/helpers';
 import {getCoords as turfGetCoords} from '@turf/invariant';
-import turfNearestPointOnLine from '@turf/nearest-point-on-line';
-import turfLineSplit from '@turf/line-split';
+import {polygonToLine as turfPolygonToLine} from '@turf/polygon-to-line';
 import {featureEach as turfFeatureEach} from '@turf/meta';
+import turfNearestPointOnLine from "@turf/nearest-point-on-line";
+import turfLineSplit from '@turf/line-split';
+import turfCleanCoords from '@turf/clean-coords';
+import turfLineOffset from '@turf/line-offset';
+import turfLineToPolygon from '@turf/line-to-polygon';
 import {
-	reverse as _reverse,
-	map as _map,
+	find as _find,
 	filter as _filter,
+	last as _last,
+	map as _map,
+	assign as _assign,
 	flatten as _flatten,
 	forEach as _forEach,
+	some as _some,
 	isEqual as _isEqual,
 	isEqualWith as _isEqualWith,
-	some as _some
+	reverse as _reverse,
+	round as _round,
+	slice as _slice
 } from 'lodash';
-import geojson from '../featuresOfKowloonEastGovernmentOffices_GF';
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiY2hpbHNhIiwiYSI6ImNrczhjcjJqYjB4Y3YybmxoZXF4MGxpN2IifQ.MCk1P9kZx-xxYmF1Ne6IlQ';
-/*
 
-// remove the windows, gates, and point
-let polygonFeatures = geojson.features.filter(f => f.geometry.type === 'Polygon');
-// add BaseLevel, Height, Color to polygons, coordinates wrapped in []
-polygonFeatures = polygonFeatures.map(f => {
-	const obj = {...f};
-	obj.properties.Height = '4.57';
-	obj.properties.BaseLevel = '7.2';
-	//obj.properties.Color = getRandomColor();
-	obj.geometry.coordinates = [[...f.geometry.coordinates]];
-	return obj;
+const units = data.units;
+const gates = data.gates;
+
+const testId = '922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_121';
+const unit = _find(units, u => u.properties.id === testId);
+const unitGates = getUnitGates(unit, gates);
+const trimUnitGates = _map(unitGates, g => {
+	return _assign(
+		{},
+		g,
+		{
+			geometry: {
+				...g.geometry,
+				coordinates: cleanCoords(g.geometry.coordinates)
+			}
+		}
+	)
 });
-*/
+const splitterPairs = getSplitterPairsOnLine(unit, trimUnitGates);
+const splitLines = getSplitLines(unit, splitterPairs);
+const combinedLines = connectLines(splitLines);
+const linesToPolygon = _map(combinedLines, f => lineToPolygon(f));
 
-const features = geojson.features;
-// polygon to lines
-const unit = {
-	"type": "Feature",
-	"properties": {
-		"ref:poi": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_poi:unit_127",
-		"area": "yes",
-		"BaseLevel": "7.2",
-		"Creation_by": "03",
-		"CreationDate": "10/11/2020",
-		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_153",
-		"imdf_id": "59175163-c1bc-44f8-acb4-37399d8a3bfc",
-		"LastAmendment_by": "03",
-		"LastAmendmentDate": "13/07/2021 11:46:36",
-		"ref:building": "922674f34fc04a9088afcd3925d8e9ae",
-		"ref:level": "791abf1f98774034be2ff9701738921e",
-		"Restricted": "N",
-		"True3DSDModelID": "1B41725189540106011",
-		"TrueBuildingCSUID": "4172518954T20050430",
-		"unit": "steps",
-		"Unit_Number": "0105",
-		"UnitSubtype": "12-01"
-	},
-	"geometry": {
-		"coordinates": [
-			[
-				114.2298159,
-				22.3097483
-			],
-			[
-				114.2298069,
-				22.3097363
-			],
-			[
-				114.2298276,
-				22.3097233
-			],
-			[
-				114.2298364,
-				22.3097349
-			],
-			[
-				114.2298159,
-				22.3097483
-			]
-		],
-		"type": "Polygon"
-	}
-};
-const unitGates = geojson.features.filter(f => {
-	return f.properties.gate === 'yes'
-		&& f.properties['ref:unit']?.split(',')?.includes(unit.properties.id)
-});
-
-let units = [];
-let gates = [];
-_forEach(features, f => {
-	if (f.properties?.unit) {
-		units.push(f);
-	}
-	if (f.properties.gate === 'yes') {
-		gates.push(f);
-	}
-});
-
-let obj;
-const data = _map(units, u => {
-	obj = {...u};
-	obj.properties.Height = '4.57';
-	return {
-		unit: obj,
-		gates: _filter(gates, g => g.properties['ref:unit'].split(',').includes(u.properties.id))
-	}
-});
-
-let unitHasGates = [];
-let unitHasNoGates = [];
-_forEach(data, d => {
-	if (d.gates.length) {
-		unitHasGates.push(d);
-	} else {
-		unitHasNoGates.push(d.unit);
-	}
-});
-
-const splitsArr = _map(unitHasGates, d => splitUnitByGates(d.unit, d.gates));
-const splits = _flatten(splitsArr);
-const _lines = _map(splits, sp => lineToPolygon(sp));
-console.log(splits);
-
-// return split points(feature) on the unit
-function getSplitters(unit, gates) {
-	let coords = [];
-	// get gates start-end points array
-	const gateStartEndPoints = _map(gates, g => {
-		coords = turfGetCoords(g);
-		return _filter(coords, (c, index) => !index || index === coords.length - 1);
-	});
-	// switch unit to line
-	const unitToLine = turfLineString(turfGetCoords(unit));
-	// get the nearest points array of the gates start-end points on the line
-	let pt;
-	return _map(gateStartEndPoints, locs => {
-		return _map(locs, loc => {
-			pt = turfPoint(loc);
-			return turfNearestPointOnLine(unitToLine, pt);
-		})
-	});
-}
-
-function splitUnitByGates(unit, gates) {
-	const splitters = getSplitters(unit, gates);
-	const unitToLine = turfLineString(turfGetCoords(unit));
+function getSplitLines(unit, splitterPairs) {
+	const unitToLine = turfPolygonToLine(unit);
 	let lines = [];
 	let split;
 	let copies;
-	_forEach(_flatten(splitters), p => {
+	_forEach(_flatten(splitterPairs), pf => {
 		if (lines.length) {
 			copies = [...lines];
 			lines = [];
-			_forEach(copies, f => {
-				split = turfLineSplit(f, p);
-				turfFeatureEach(split, f => lines = [...lines, f]);
+			_forEach(copies, feature => {
+				split = turfLineSplit(feature, pf);
+				turfFeatureEach(split, lf => lines = [...lines, lf]);
 			});
 		} else {
-			split = turfLineSplit(unitToLine, p);
-			turfFeatureEach(split, f => lines.push(f));
+			split = turfLineSplit(unitToLine, pf);
+			turfFeatureEach(split, lf => lines.push(lf));
 		}
 	});
-	
-	let coords;
-	const splitterCoords = _map(splitters, features => _map(features, f => turfGetCoords(f)));
-	let linesTakeoffGates = _filter(lines, f => {
-		coords = turfGetCoords(f);
-		return !_some(splitterCoords, elm => {
-			return _isEqualWith(elm, coords, (elmV, coordsV) => {
-				return _isEqual(elmV, coordsV) || _isEqual(elmV, _reverse(coordsV));
-			})
-		});
-	});
+	// remove duplicate coordinates of the lines
+	lines = _map(lines, l => turfCleanCoords(l));
+	// take off the gates
+	lines = takeOffLines(lines, splitterPairs);
 	// add unit properties to split lines
-	linesTakeoffGates = _map(linesTakeoffGates, f => ({...f, properties: unit.properties}));
-	
-	return linesTakeoffGates;
+	lines = _map(lines, f => ({...f, properties: unit.properties}));
+	return lines;
 }
 
 function lineToPolygon(lineFeature) {
-	const leftOffset = turfLineOffset(lineFeature, -0.15, {units: 'meters'}),
-		rightOffset = turfLineOffset(lineFeature, 0.15, {units: 'meters'}),
-		combineLine = turfLineString(
-			turfGetCoords(leftOffset).concat(_reverse(turfGetCoords(rightOffset)))
-		);
+	const leftOffset = turfLineOffset(lineFeature, -0.15, {units: 'meters'});
+	const rightOffset = turfLineOffset(lineFeature, 0.15, {units: 'meters'});
+	const combineLine = turfLineString(
+		turfGetCoords(leftOffset).concat(_reverse(turfGetCoords(rightOffset)))
+	);
 	try {
 		return turfLineToPolygon(combineLine);
 	} catch (e) {
 		console.log(lineFeature, combineLine);
 	}
-	
 }
 
-let lines = splitUnitByGates(unit, unitGates);
-lines = _map(lines, l => lineToPolygon(l));
-
-const unusual = {
-	"type": "Feature",
-	"properties": {
-		"ref:poi": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_poi:unit_99",
-		"area": "yes",
-		"BaseLevel": "7.2",
-		"Creation_by": "03",
-		"CreationDate": "10/11/2020",
-		"id": "922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_121",
-		"imdf_id": "2abcb199-3b15-4ccc-9d84-c9317a185cb6",
-		"LastAmendment_by": "03",
-		"LastAmendmentDate": "13/07/2021 11:46:36",
-		"ref:building": "922674f34fc04a9088afcd3925d8e9ae",
-		"ref:level": "791abf1f98774034be2ff9701738921e",
-		"Restricted": "N",
-		"True3DSDModelID": "1B41725189540106011",
-		"TrueBuildingCSUID": "4172518954T20050430",
-		"unit": "room",
-		"Unit_Number": "0102",
-		"UnitSubtype": "09-01"
-	},
-	"geometry": {
-		"coordinates": [
-			[
-				114.2299791,
-				22.3096146
-			],
-			[
-				114.2299892,
-				22.3096081
-			],
-			[
-				114.2299913,
-				22.309611
-			],
-			[
-				114.2300186,
-				22.3095934
-			],
-			[
-				114.2300166,
-				22.3095907
-			],
-			[
-				114.2300284,
-				22.3095831
-			],
-			[
-				114.2300198,
-				22.3095708
-			],
-			[
-				114.2299846,
-				22.3095935
-			],
-			[
-				114.2299784,
-				22.3095853
-			],
-			[
-				114.2299641,
-				22.3095946
-			],
-			[
-				114.2299791,
-				22.3096146
-			]
-		],
-		"type": "Polygon"
+// connect the first and last line
+function connectLines(lines) {
+	console.log(lines);
+	let target, first, firstCoords, last, combined;
+	for (let i = 0; i < lines.length; i++) {
+		firstCoords = turfGetCoords(lines[i]);
+		target = _find(
+			lines,
+			l => _isEqual(turfGetCoords(l)[0], _last(firstCoords))
+		);
+		if (target) {
+			first = lines[i];
+			last = target;
+			break;
+		}
 	}
+	combined = _assign(
+		{},
+		first,
+		{
+			geometry: {
+				...first.geometry,
+				coordinates: firstCoords.concat(_slice(turfGetCoords(target), 1))
+			}
+		}
+	);
+	
+	return _filter(lines, l => {
+		return !_isEqual(l.geometry.coordinates, first.geometry.coordinates) &&
+			!_isEqual(l.geometry.coordinates, last.geometry.coordinates)
+	}).concat(combined);
 }
 
-// -------
+// take off the gates from split lines
+function takeOffLines(lines, splitterPairs) {
+	const coordsArr = _map(splitterPairs, pair => _map(pair, f => turfGetCoords(f)));
+	let coords;
+	return _filter(lines, f => {
+		coords = turfGetCoords(f);
+		return !_some(coordsArr, elm => {
+			return _isEqualWith(elm, coords, (elmV, coordsV) => {
+				return _isEqual(elmV, coordsV) || _isEqual(elmV, _reverse(coordsV));
+			})
+		});
+	});
+}
+
+// return the nearest points(feature pairs) on the unit line of the gates
+function getSplitterPairsOnLine(unit, trimGates) {
+	const unitToLine = turfPolygonToLine(unit);
+	let points = [];
+	let feature;
+	return _map(trimGates, g => {
+		points = _map(turfGetCoords(g), loc => turfPoint(loc));
+		return _map(points, point => {
+			feature = turfNearestPointOnLine(unitToLine, point);
+			feature.geometry.coordinates = _map(feature.geometry.coordinates, loc => _round(loc, 7));
+			return feature;
+		})
+	});
+}
+
+// return all gates which are refer to the unit
+function getUnitGates(unit, allGates) {
+	return _filter(allGates, g => g.properties['ref:unit'].split(',').includes(unit.properties.id));
+}
+
+// return a coordsArray which is just made up of a start-coordinate and an end-coordinate
+function cleanCoords(coordsArr) {
+	return coordsArr.length > 2
+		? [coordsArr[0], _last(coordsArr)]
+		: coordsArr
+}
+
 function getRandomColor() {
 	return `rgba(${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},${Math.floor(Math.random() * 255)},1)`;
-}
-
-function addSource(map, id, data) {
-	map.addSource(id, {
-		type: 'geojson',
-		data: {
-			type: data.type,
-			geometry: data.geometry
-		}
-	})
 }
 
 function initMapbox() {
 	return new mapboxgl.Map({
 		style: 'mapbox://styles/mapbox/streets-v11',
-		center: [114.22980247477426, 22.310013597985446],
-		zoom: 18.5,
+		//center: [114.22980247477426, 22.310013597985446],
+		center: [114.22998872247331, 22.309601664596073],
+		//zoom: 18.5,
+		zoom: 22,
 		pitch: 60,
 		container: 'map'
 	});
 }
 
 export default function LevelElements() {
+	
 	useEffect(() => {
 		const map = initMapbox();
 		map.on('load', () => {
+			/*map.addLayer({
+				id: 'units',
+				type: 'fill',
+				source: {
+					type: 'geojson',
+					data: unit
+				},
+				paint: {
+					'fill-color': 'red'
+				}
+			});*/
+			
+			/*map.addLayer({
+				id: 'gates',
+				type: 'line',
+				source: {
+					type: 'geojson',
+					data: {
+						type: 'FeatureCollection',
+						features: splitLines
+					}
+				},
+				paint: {
+					'line-color': '#aaa',
+					'line-width': 2
+				}
+			});*/
+			
+			/*map.addLayer({
+				id: 'splitters',
+				type: 'circle',
+				source: {
+					type: 'geojson',
+					data: {
+						type: 'FeatureCollection',
+						features: _flatten(splitterPairs)
+					}
+				},
+				paint: {
+					'circle-color': 'blue'
+				}
+			})*/
+			
 			map.addLayer({
 				id: 'lineToPolygon3',
 				type: 'fill-extrusion',
@@ -306,7 +236,7 @@ export default function LevelElements() {
 					type: 'geojson',
 					data: {
 						type: 'FeatureCollection',
-						features: lines
+						features: linesToPolygon
 					}
 				},
 				'paint': {
