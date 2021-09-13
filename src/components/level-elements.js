@@ -51,6 +51,7 @@ const splitLines = getSplitLines(unit, splitterPairs);
 const combinedLines = connectLines(splitLines);
 const linesToPolygon = _map(combinedLines, f => lineToPolygon(f));
 
+// split line by points
 function getSplitLines(unit, splitterPairs) {
 	const unitToLine = turfPolygonToLine(unit);
 	let lines = [];
@@ -78,6 +79,7 @@ function getSplitLines(unit, splitterPairs) {
 	return lines;
 }
 
+// convert line into polygon
 function lineToPolygon(lineFeature) {
 	const leftOffset = turfLineOffset(lineFeature, -0.15, {units: 'meters'});
 	const rightOffset = turfLineOffset(lineFeature, 0.15, {units: 'meters'});
@@ -87,13 +89,14 @@ function lineToPolygon(lineFeature) {
 	try {
 		return turfLineToPolygon(combineLine);
 	} catch (e) {
-		console.log(lineFeature, combineLine);
+		console.error('turf lineToPolygon goes wrong!');
+		console.log('origin: ', lineFeature);
+		console.log('result: ', combineLine);
 	}
 }
 
 // connect the first and last line
 function connectLines(lines) {
-	console.log(lines);
 	let target, first, firstCoords, last, combined;
 	for (let i = 0; i < lines.length; i++) {
 		firstCoords = turfGetCoords(lines[i]);
@@ -128,11 +131,13 @@ function connectLines(lines) {
 function takeOffLines(lines, splitterPairs) {
 	const coordsArr = _map(splitterPairs, pair => _map(pair, f => turfGetCoords(f)));
 	let coords;
+	let clean;
 	return _filter(lines, f => {
 		coords = turfGetCoords(f);
 		return !_some(coordsArr, elm => {
 			return _isEqualWith(elm, coords, (elmV, coordsV) => {
-				return _isEqual(elmV, coordsV) || _isEqual(elmV, _reverse(coordsV));
+				clean = cleanCoords(coordsV);
+				return _isEqual(elmV, clean) || _isEqual(_reverse(elmV), clean);
 			})
 		});
 	});
