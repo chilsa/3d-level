@@ -30,11 +30,51 @@ mapboxgl.accessToken = 'pk.eyJ1IjoiY2hpbHNhIiwiYSI6ImNrczhjcjJqYjB4Y3YybmxoZXF4M
 
 const units = data.units;
 const gates = data.gates;
+let unitsHaveGates = [];
+let unitNoGates = [];
 
-const testId = '922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_121';
-const unit = _find(units, u => u.properties.id === testId);
-const unitGates = getUnitGates(unit, gates);
-const trimUnitGates = _map(unitGates, g => {
+let obj;
+_forEach(units, unit => {
+	obj = {...unit};
+	obj.properties.Height = '4.57';
+	if (getUnitGates(obj, gates).length) {
+		unitsHaveGates.push(obj);
+	} else {
+		unitNoGates.push(obj);
+	}
+});
+
+// trim gates coordinates just to be length 2 of start-end points
+let unitGates, combinedGates, trimUnitGates, splitterPairs, splitLines, combinedLines;
+const linesToPolygonArr = _map(unitsHaveGates, unit => {
+	unitGates = getUnitGates(unit, gates);
+	combinedGates = connectLines(unitGates);
+	trimUnitGates = _map(combinedGates, g => {
+		return _assign(
+			{},
+			g,
+			{
+				geometry: {
+					...g.geometry,
+					coordinates: cleanCoords(g.geometry.coordinates)
+				}
+			}
+		)
+	});
+	splitterPairs = getSplitterPairsOnLine(unit, trimUnitGates);
+	splitLines = getSplitLines(unit, splitterPairs);
+	combinedLines = connectLines(splitLines);
+	return _map(combinedLines, f => ({...lineToPolygon(f), properties: unit.properties}));
+});
+const polygons = _flatten(linesToPolygonArr);
+
+
+/* 单个测试
+const testId = '922674f34fc04a9088afcd3925d8e9ae_791abf1f98774034be2ff9701738921e_unit_151';
+const _unit = _find(units, u => u.properties.id === testId);
+const _unitGates = getUnitGates(_unit, gates);
+const _combinedGates = connectLines(_unitGates);
+const _trimUnitGates = _map(_combinedGates, g => {
 	return _assign(
 		{},
 		g,
@@ -46,10 +86,11 @@ const trimUnitGates = _map(unitGates, g => {
 		}
 	)
 });
-const splitterPairs = getSplitterPairsOnLine(unit, trimUnitGates);
-const splitLines = getSplitLines(unit, splitterPairs);
-const combinedLines = connectLines(splitLines);
-const linesToPolygon = _map(combinedLines, f => lineToPolygon(f));
+const _splitterPairs = getSplitterPairsOnLine(_unit, _trimUnitGates);
+const _splitLines = getSplitLines(_unit, _splitterPairs);
+const _combinedLines = connectLines(_splitLines);
+const linesToPolygon = _map(_combinedLines, f => lineToPolygon(f));
+*/
 
 // split line by points
 function getSplitLines(unit, splitterPairs) {
@@ -74,8 +115,6 @@ function getSplitLines(unit, splitterPairs) {
 	lines = _map(lines, l => turfCleanCoords(l));
 	// take off the gates
 	lines = takeOffLines(lines, splitterPairs);
-	// add unit properties to split lines
-	lines = _map(lines, f => ({...f, properties: unit.properties}));
 	return lines;
 }
 
@@ -110,21 +149,25 @@ function connectLines(lines) {
 			break;
 		}
 	}
-	combined = _assign(
-		{},
-		first,
-		{
-			geometry: {
-				...first.geometry,
-				coordinates: firstCoords.concat(_slice(turfGetCoords(target), 1))
+	if (first && last) {
+		combined = _assign(
+			{},
+			first,
+			{
+				geometry: {
+					...first.geometry,
+					coordinates: firstCoords.concat(_slice(turfGetCoords(target), 1))
+				}
 			}
-		}
-	);
-	
-	return _filter(lines, l => {
-		return !_isEqual(l.geometry.coordinates, first.geometry.coordinates) &&
-			!_isEqual(l.geometry.coordinates, last.geometry.coordinates)
-	}).concat(combined);
+		);
+		
+		return _filter(lines, l => {
+			return !_isEqual(l.geometry.coordinates, first.geometry.coordinates) &&
+				!_isEqual(l.geometry.coordinates, last.geometry.coordinates)
+		}).concat(combined);
+	} else {
+		return lines;
+	}
 }
 
 // take off the gates from split lines
@@ -177,10 +220,10 @@ function getRandomColor() {
 function initMapbox() {
 	return new mapboxgl.Map({
 		style: 'mapbox://styles/mapbox/streets-v11',
-		//center: [114.22980247477426, 22.310013597985446],
-		center: [114.22998872247331, 22.309601664596073],
-		//zoom: 18.5,
-		zoom: 22,
+		center: [114.22980247477426, 22.310013597985446],
+		//center: [114.22998872247331, 22.309601664596073],
+		zoom: 18.5,
+		//zoom: 22,
 		pitch: 60,
 		container: 'map'
 	});
@@ -191,64 +234,38 @@ export default function LevelElements() {
 	useEffect(() => {
 		const map = initMapbox();
 		map.on('load', () => {
-			/*map.addLayer({
-				id: 'units',
-				type: 'fill',
-				source: {
-					type: 'geojson',
-					data: unit
-				},
-				paint: {
-					'fill-color': 'red'
-				}
-			});*/
-			
-			/*map.addLayer({
-				id: 'gates',
-				type: 'line',
-				source: {
-					type: 'geojson',
-					data: {
-						type: 'FeatureCollection',
-						features: splitLines
-					}
-				},
-				paint: {
-					'line-color': '#aaa',
-					'line-width': 2
-				}
-			});*/
-			
-			/*map.addLayer({
-				id: 'splitters',
-				type: 'circle',
-				source: {
-					type: 'geojson',
-					data: {
-						type: 'FeatureCollection',
-						features: _flatten(splitterPairs)
-					}
-				},
-				paint: {
-					'circle-color': 'blue'
-				}
-			})*/
-			
 			map.addLayer({
-				id: 'lineToPolygon3',
+				id: 'structures',
 				type: 'fill-extrusion',
 				source: {
 					type: 'geojson',
 					data: {
 						type: 'FeatureCollection',
-						features: linesToPolygon
+						features: unitNoGates
 					}
 				},
 				'paint': {
 					'fill-extrusion-color': '#aaa',
-					'fill-extrusion-height': 4,
+					'fill-extrusion-height': ['+', ['to-number', ['get', 'BaseLevel']], ['to-number', ['get', 'Height']]],
 					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
-					'fill-extrusion-opacity': 0.5
+					'fill-extrusion-opacity': 1
+				}
+			});
+			map.addLayer({
+				id: 'units',
+				type: 'fill-extrusion',
+				source: {
+					type: 'geojson',
+					data: {
+						type: 'FeatureCollection',
+						features: polygons
+					}
+				},
+				'paint': {
+					'fill-extrusion-color': '#c2e0dd',
+					'fill-extrusion-height': ['+', ['to-number', ['get', 'BaseLevel']], ['to-number', ['get', 'Height']]],
+					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
+					'fill-extrusion-opacity': 1
 				}
 			});
 		});
