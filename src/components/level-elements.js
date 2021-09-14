@@ -280,7 +280,7 @@ export default function LevelElements() {
 					}
 				},
 				paint: {
-					'fill-extrusion-color': '#aaa',
+					'fill-extrusion-color': '#bbb',
 					'fill-extrusion-height': ['to-number', ['get', 'BaseLevel']],
 					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
 					'fill-extrusion-opacity': 1
