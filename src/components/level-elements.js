@@ -220,10 +220,8 @@ function getRandomColor() {
 function initMapbox() {
 	return new mapboxgl.Map({
 		style: 'mapbox://styles/mapbox/streets-v11',
-		center: [114.22980247477426, 22.310013597985446],
-		//center: [114.22998872247331, 22.309601664596073],
-		zoom: 18.5,
-		//zoom: 22,
+		center: [114.22987768645362, 22.309706374643582],
+		zoom: 19.6,
 		pitch: 60,
 		container: 'map'
 	});
