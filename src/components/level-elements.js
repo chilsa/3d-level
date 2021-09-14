@@ -231,6 +231,7 @@ export default function LevelElements() {
 	
 	useEffect(() => {
 		const map = initMapbox();
+		// structures
 		map.on('load', () => {
 			map.addLayer({
 				id: 'structures',
@@ -242,13 +243,14 @@ export default function LevelElements() {
 						features: unitNoGates
 					}
 				},
-				'paint': {
+				paint: {
 					'fill-extrusion-color': '#aaa',
 					'fill-extrusion-height': ['+', ['to-number', ['get', 'BaseLevel']], ['to-number', ['get', 'Height']]],
 					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
 					'fill-extrusion-opacity': 1
 				}
 			});
+			// units
 			map.addLayer({
 				id: 'units',
 				type: 'fill-extrusion',
@@ -259,13 +261,31 @@ export default function LevelElements() {
 						features: polygons
 					}
 				},
-				'paint': {
+				paint: {
 					'fill-extrusion-color': '#c2e0dd',
 					'fill-extrusion-height': ['+', ['to-number', ['get', 'BaseLevel']], ['to-number', ['get', 'Height']]],
 					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
 					'fill-extrusion-opacity': 1
 				}
 			});
+			// levels
+			map.addLayer({
+				id: 'floor',
+				type: 'fill-extrusion',
+				source: {
+					type: 'geojson',
+					data: {
+						type: 'FeatureCollection',
+						features: data.levels
+					}
+				},
+				paint: {
+					'fill-extrusion-color': '#aaa',
+					'fill-extrusion-height': ['to-number', ['get', 'BaseLevel']],
+					'fill-extrusion-base': ['to-number', ['get', 'BaseLevel']],
+					'fill-extrusion-opacity': 1
+				}
+			})
 		});
 	}, []);
 	
